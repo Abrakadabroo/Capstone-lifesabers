@@ -115,8 +115,8 @@ public class SensorActivity extends Activity {
     LinePointCollection linePointCollectionHeartrate;
 
     /// PPG
-    protected LineGraphing lineGraphingPPGrate;
-    LinePointCollection linePointCollectionPPGrate;
+    protected LineGraphing lineGraphingPPGRate;
+    LinePointCollection linePointCollectionPPGRate;
 
 
     /// define variables of values that we care about
@@ -139,9 +139,9 @@ public class SensorActivity extends Activity {
     public final static String BLE_MAXIM_HSP_PRESSURE_CHARACTERISTIC = "1d8a1932-da49-49ad-91d8-800832e7e940";  // pressure
     public final static String BLE_MAXIM_HSP_HEARTRATE_CHARACTERISTIC = "621a00e3-b093-46bf-aadc-abe4c648c569";  // heart rate
     public final static String BLE_MAXIM_HSP_COMMAND_CHARACTERISTIC = "36e55e37-6b5b-420b-9107-0d34a0e8675a"; // command
-    //public final static String BLE_MAXIM_HSP_PPGRATE_CHARACTERISTIC = ; //ppg
+    public final static String BLE_MAXIM_HSP_PPGRate_CHARACTERISTIC = "aed5b130-7d0a-11e8-adc0-fa7ae01bbebc"; //ppg
 
-    
+
     /**
      * Subscribe to all of the HSP characteristics that we care about
      */
@@ -164,8 +164,8 @@ public class SensorActivity extends Activity {
                     if (cha.getUuid().compareTo(UUID.fromString(BLE_MAXIM_HSP_PRESSURE_CHARACTERISTIC)) == 0) {
                         mBluetoothLeService.Subscribe(cha.getService().getUuid(), cha.getUuid());
                     }
-                    /*if (cha.getUuid().compareTo(UUID.fromString(BLE_MAXIM_HSP_PPGRate_CHARACTERISTIC)) == 0) {
-                        mBluetoothLeService.Subscribe(cha.getService().getUuid(), cha.getUuid());*/
+                    if (cha.getUuid().compareTo(UUID.fromString(BLE_MAXIM_HSP_PPGRate_CHARACTERISTIC)) == 0) {
+                        mBluetoothLeService.Subscribe(cha.getService().getUuid(), cha.getUuid());
                     }
                 }
             }
@@ -195,14 +195,14 @@ public class SensorActivity extends Activity {
         mTextTemperature = (TextView) findViewById(R.id.textTemperature);
         mTextPressureRaw = (TextView) findViewById(R.id.textPressureRaw);
         mTextHeartRate = (TextView) findViewById(R.id.textHeartRate);
-        mTextHeartRateRaw = (TextView) findViewById(R.id.textHeartRateRaw);
+        mTextHeartRateRaw = (TextView) findViewById(R.id.textPPGRateRaw);
         mBtnSubscribe = (Button) findViewById(R.id.btnSubscribe);
         mClickStartBtn = (TextView) findViewById(R.id.clickStartBtn);
         mClickStartBtn2 = (TextView) findViewById(R.id.clickStartBtn2);
         mAccelMissionStopped = (TextView) findViewById(R.id.textView7);
         mECGMissionStopped = (TextView) findViewById(R.id.textView8);
-        //mTextPPGRateRaw = (TextView) findViewById(R.id.textPPGRateRaw);
-        //mTextPPGRate = (TextView) findViewById(R.id.textPPGRate);
+        mTextPPGRateRaw = (TextView) findViewById(R.id.textPPGRateRaw);
+        mTextPPGRate = (TextView) findViewById(R.id.textPPGRate);
 
         /// accelerometer
         lineGraphingAccelerometer = (LineGraphing) findViewById(R.id.lineGraphingAccelerometer);
@@ -216,7 +216,7 @@ public class SensorActivity extends Activity {
         lineGraphingHeartrate = (LineGraphing) findViewById(R.id.lineGraphingHeartrate);
 
         ///PPG
-        /**lineGraphingPPGrate = (LineGraphing) findViewById(R.id.lineGraphingPPGrate);**/
+        lineGraphingPPGRate = (LineGraphing) findViewById(R.id.lineGraphingPPGRate);
 
         mBtnSubscribe.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -270,8 +270,8 @@ public class SensorActivity extends Activity {
         linePointCollectionHeartrate = new LinePointCollection(Color.BLACK, 20);
         lineGraphingHeartrate.addPointCollection(linePointCollectionHeartrate);
 
-        ///linePointCollectionPPGrate = new LinePointCollection(Color.BLACK, 20);
-        ///lineGraphingPPGrate.addPointCollection(linePointCollectionPPGrate);
+        linePointCollectionPPGRate = new LinePointCollection(Color.BLACK, 20);
+        lineGraphingPPGRate.addPointCollection(linePointCollectionPPGRate);
 
 
 
@@ -529,7 +529,15 @@ public class SensorActivity extends Activity {
             linePointCollectionHeartrate.addpoint(value);
             lineGraphingHeartrate.plotPointCollection();
         }
-        ///PPG Calculation code goes here
+        //PPG Calculation code goes here
+        if (characteristic.compareTo(UUID.fromString(BLE_MAXIM_HSP_PPGRate_CHARACTERISTIC)) == 0) {
+            mTextPPGRateRaw.setText(str);
+            value = CalculateHeartRate(data);
+            mTextPPGRate.setText(String.format("%.1f", value));
+            linePointCollectionPPGRate.addpoint(value);
+            lineGraphingPPGRate.plotPointCollection();
+        }
+
     }
 
     /// array of hex ascii values used for hex byte to string conversion
