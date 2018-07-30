@@ -37,7 +37,7 @@
 #include "BluetoothLE.h"
 
 /// define the number of characteristics used on the HSP platform
-#define NUMBER_OF_CHARACTERISTICS (7)
+#define NUMBER_OF_CHARACTERISTICS (8)
 
 /// indicies of the characteristics used
 #define CHARACTERISTIC_TEMP_TOP (0)
