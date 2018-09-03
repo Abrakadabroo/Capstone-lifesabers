@@ -2,7 +2,7 @@
  * Copyright (C) 2016 Maxim Integrated Products, Inc., All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
+ * copy of this software and associated documentati on files (the "Software"),
  * to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense,
  * and/or sell copies of the Software, and to permit persons to whom the
@@ -33,6 +33,9 @@
 #include "HspBLE.h"
 #include "Peripherals.h"
 #include "MAX30001_helper.h"
+#include "MAX30101_helper.h" //I added
+#include "MAX30101.h" //Added
+#include "MAX30101_RPC.h" //Added
 
 #define LOW_BYTE(x) ((uint8_t)((x)&0xFF))
 #define HIGH_BYTE(x) ((uint8_t)(((x) >> 8) & 0xFF))
@@ -42,10 +45,15 @@ uint8_t HspBLE::temperatureTopCharUUID[] = {0x35,0x44,0x53,0x1b,0x00,0xc3,0x43,0
 uint8_t HspBLE::temperatureBottomCharUUID[] = {0x35,0x44,0x53,0x1b,0x00,0xc3,0x43,0x42,0x97,0x55,0xb5,0x6a,0xbe,0x8e,0x6a,0x66};
 uint8_t HspBLE::accelerometerCharUUID[] = {0xe6,0xc9,0xda,0x1a,0x80,0x96,0x48,0xbc,0x83,0xa4,0x3f,0xca,0x38,0x37,0x05,0xaf};
 uint8_t HspBLE::heartrateCharUUID[] = {0x62,0x1a,0x00,0xe3,0xb0,0x93,0x46,0xbf,0xaa,0xdc,0xab,0xe4,0xc6,0x48,0xc5,0x69};
-uint8_t HspBLE::pressureCharUUID[] = {0x1d,0x8a,0x19,0x32,0xda,0x49,0x49,0xad,0x91,0xd8,0x80,0x08,0x32,0xe7,0xe9,0x40};
+uint8_t HspBLE::pressureCharUUID[] = {0xae,0xd5,0xb1,0x30,0x7d,0x0a,0x11,0xe8,0xad,0xc0,0xfa,0x7a,0xe0,0x1b,0xbe,0xbc};//0x1d,0x8a,0x19,0x32,0xda,0x49,0x49,0xad,0x91,0xd8,0x80,0x08,0x32,0xe7,0xe9,0x40
+uint8_t HspBLE::ppgCharUUID[] = {0x1d,0x8a,0x19,0x32,0xda,0x49,0x49,0xad,0x91,0xd8,0x80,0x08,0x32,0xe7,0xe9,0x40};//0xae,0xd5,0xb1,0x30,0x7d,0x0a,0x11,0xe8,0xad,0xc0,0xfa,0x7a,0xe0,0x1b,0xbe,0xbc
 uint8_t HspBLE::dataCharUUID[] = {0xaa,0x8a,0x19,0x32,0xda,0x49,0x49,0xad,0x91,0xd8,0x80,0x08,0x32,0xe7,0xe9,0x40};
 uint8_t HspBLE::commandCharUUID[] = {0x36,0xe5,0x5e,0x37,0x6b,0x5b,0x42,0x0b,0x91,0x07,0x0d,0x34,0xa0,0xe8,0x67,0x5a};
-uint8_t HspBLE::ppgCharUUID[] = {0xae,0xd5,0xb1,0x30,0x7d,0x0a,0x11,0xe8,0xad,0xc0,0xfa,0x7a,0xe0,0x1b,0xbe,0xbc};
+
+uint32_t currentPPGData; //a variable used to store the ppg data from 
+                         //onDataavailable function;
+uint32_t PPGid;
+uint32_t PPGlength;
 
 
 /// define the BLE device name
@@ -95,14 +103,26 @@ void HspBLE::init(void) {
     bluetoothLE->addCharacteristic(new Characteristic(6 /* number of bytes */,accelerometerCharUUID,GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_READ | GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_NOTIFY));
     bluetoothLE->addCharacteristic(new Characteristic(4 /* number of bytes */,heartrateCharUUID,GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_READ | GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_NOTIFY));
     bluetoothLE->addCharacteristic(new Characteristic(8 /* number of bytes */,pressureCharUUID,GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_READ | GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_NOTIFY));
-    bluetoothLE->addCharacteristic(new Characteristic(4 /* number of bytes */,ppgCharUUID,GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_READ | GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_NOTIFY));
+    bluetoothLE->addCharacteristic(new Characteristic(3 /* number of bytes */,ppgCharUUID,GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_READ | GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_NOTIFY));
     bluetoothLE->addCharacteristic(new Characteristic(32 /* number of bytes */,dataCharUUID,GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_READ | GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_WRITE));
     bluetoothLE->addCharacteristic(new Characteristic(1 /* number of bytes */,commandCharUUID,GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_READ | GattCharacteristic::BLE_GATT_CHAR_PROPERTIES_WRITE));
     bluetoothLE->initService(serialNumberPtr, deviceName, sizeof(deviceName),envServiceUUID);
 
   bluetoothLE->onDataWritten(&HspBLE::_onDataWritten);
-  ticker.attach(callback(this, &HspBLE::tickerHandler), 1);
+  Peripherals::max30101()->onDataAvailable(&HspBLE::_useData);
+  ticker.attach(callback(this, &HspBLE::tickerHandler), 0.2);
+  
+  //Peripherals::max30101()->Multimode_init(0x00, 0x00, 0x01, 0x03, 0x33, 0x33, 0x33, 0x01, 0x02,
+  //                         0x03, 0x00);
+  //Peripherals::max30101()-> HRmode_init(0x0, 0x00, 0x01, 0x03,
+  //                      0x33);
+  Peripherals::max30101()-> HRmode_init(0x03, 0x00, 0x05, 0x03,0x33);
+   //This is pointing the 
+  //Peripherals::max30101()-> dataAvailable(&HspBLE::_useData); //pointer onDataAvailable to the useData function
+  //ADD function to header file.
 }
+//void useData(uint32_t id, uint32_t *buffer, uint32_t length)
+
 
 void HspBLE::_onDataWritten(int index) {
   HspBLE::instance->onDataWritten(index);
@@ -124,6 +144,14 @@ void HspBLE::onDataWritten(int index) {
         	printf("onDataWritten index %d, data %02X, length %d ",index,data[0],length); fflush(stdout);
     }
   }
+}
+void HspBLE::_useData(uint32_t id, uint32_t *buffer, uint32_t length) {
+	//do something
+	HspBLE::instance->useData(id, buffer, length);
+}
+
+void HspBLE::useData(uint32_t id, uint32_t *buffer, uint32_t length) {
+	currentPPGData = 12;//*buffer;
 }
 
 void HspBLE::pollSensor(int sensorId, uint8_t *data) {
@@ -154,15 +182,18 @@ void HspBLE::pollSensor(int sensorId, uint8_t *data) {
   case CHARACTERISTIC_PRESSURE: {
     unsigned int i;
     uint8_t *bytePtr;
-    float temperature;
+    /*float temperature;
     float pressure;
     Peripherals::bmp280()->ReadCompData(&temperature, &pressure);
     bytePtr = reinterpret_cast<uint8_t *>(&temperature);
     for (i = 0; i < sizeof(float); i++)
-      data[i] = bytePtr[i];
+      data[i] = 0;//bytePtr[i
     bytePtr = reinterpret_cast<uint8_t *>(&pressure);
     for (i = 0; i < sizeof(float); i++)
-      data[i + sizeof(float)] = bytePtr[i];
+      data[i + sizeof(float)] = 0;//bytePtr[i]*/
+      bytePtr = reinterpret_cast<uint8_t *>(&currentPPGData);
+    for (i = 0; i < sizeof(currentPPGData); i++)
+      data[i] = bytePtr[i];
   } break;
   case CHARACTERISTIC_HEARTRATE: {
     unsigned int i;
@@ -170,24 +201,42 @@ void HspBLE::pollSensor(int sensorId, uint8_t *data) {
     MAX30001::max30001_bledata_t heartrateData;
     Peripherals::max30001()->ReadHeartrateData(&heartrateData);
     bytePtr = reinterpret_cast<uint8_t *>(&heartrateData);
-    for (i = 0; i < sizeof(MAX30001::max30001_bledata_t); i++)
-      data[i] = bytePtr[i];
-  } break;
-    case CHARACTERISTIC_PPG: {
-    unsigned int i;
-    uint8_t *bytePtr;
-	uint8_t fifo_waterlevel_mark;
-	uint8_t ppg_avg;
-	uint8_t ppg_rate;
-	uint8_t pulse_width;
-	uint8_t red_led_current;
-    Peripherals::max30101()->HRmode_init(fifo_waterlevel_mark, ppg_avg, ppg_rate, pulse_width, red_led_current);
-    //bytePtr = reinterpret_cast<uint8_t *>(&ppgData);
-    //for (i = 0; i < sizeof(MAX30101::max30101_bledata_t); i++)
+    for (i=0; i < 8; i++)
+    	data[i] = 0;
+    //for (i = 0; i < sizeof(MAX30001::max30001_bledata_t); i++)
       //data[i] = bytePtr[i];
+  } break;
+  case CHARACTERISTIC_PPG: {
+	//Peripherals::max30101()->setLED1_PA(0x3Fh);
+	//Peripherals::max30101()->
+	unsigned int i;
+	uint8_t *bytePtr;
+	//uint32_t max30101_buffer;
+	
+    /*int HRmode_init(&fifo_waterlevel_mark,&sample_avg,
+                  uint8_t sample_rate, uint8_t pulse_width,
+                  uint8_t red_led_current)*/
+	//Waterlevel mark is 0x03, as we want to read 3 bytes and stop. Look at datasheet: Bits 3:0: FIFO Almost Full Value (FIFO_A_FULL))
+	//Peripherals::max30101()-> HRmode_init(0x03, 0x00, 0x01, 0x03,0x33);
+                    
+    
+	/*MAX30101::DataCallbackFunction *buffer;
+	currentPPGData = buffer;*/
+	
+	//Peripherals::max30101()->int_handler(&max30101_buffer);
+	
+	//Peripherals::max30101()-> int_handler(&max30101_buffer);
+	//Peripherals::max30101()-> dataAvailable(&useData);
+	bytePtr = reinterpret_cast<uint8_t *>(&currentPPGData);
+    for (i = 0; i < 8; i++)
+      data[i] = 0;
+	//Peripherals::max30101()->Multimode_init(0x00, 0x00, 0x01, 0x03, 0x33, 0x33, 0x33, 0x01, 0x02, 0x03, 0x00);
+    //Peripherals::max30101()-> HRmode_init(0x0, 0x00, 0x01, 0x03, 0x33); Original Values
+   
   } break;
   }
 }
+
 
 bool HspBLE::getStartDataLogging(void) { return startDataLogging; }
 
@@ -197,18 +246,17 @@ bool HspBLE::getStartDataLogging(void) { return startDataLogging; }
 void HspBLE::tickerHandler(void) {
   uint8_t data[8];
   if (bluetoothLE->isConnected()) {
-    pollSensor(CHARACTERISTIC_TEMP_TOP, data);
-    bluetoothLE->notifyCharacteristic(CHARACTERISTIC_TEMP_TOP, data);
-    pollSensor(CHARACTERISTIC_TEMP_BOTTOM, data);
-    bluetoothLE->notifyCharacteristic(CHARACTERISTIC_TEMP_BOTTOM, data);
-    pollSensor(CHARACTERISTIC_ACCELEROMETER, data);
-    bluetoothLE->notifyCharacteristic(CHARACTERISTIC_ACCELEROMETER, data);
-    pollSensor(CHARACTERISTIC_HEARTRATE, data);
-    bluetoothLE->notifyCharacteristic(CHARACTERISTIC_HEARTRATE, data);
+    //pollSensor(CHARACTERISTIC_TEMP_TOP, data);
+    //bluetoothLE->notifyCharacteristic(CHARACTERISTIC_TEMP_TOP, data);
+    //pollSensor(CHARACTERISTIC_TEMP_BOTTOM, data);
+    //bluetoothLE->notifyCharacteristic(CHARACTERISTIC_TEMP_BOTTOM, data);
+    //pollSensor(CHARACTERISTIC_ACCELEROMETER, data);
+    //bluetoothLE->notifyCharacteristic(CHARACTERISTIC_ACCELEROMETER, data);
+    //pollSensor(CHARACTERISTIC_HEARTRATE, data);
+    //bluetoothLE->notifyCharacteristic(CHARACTERISTIC_HEARTRATE, data);
     pollSensor(CHARACTERISTIC_PRESSURE, data);
     bluetoothLE->notifyCharacteristic(CHARACTERISTIC_PRESSURE, data);
-    pollSensor(CHARACTERISTIC_PPG, data);
-    bluetoothLE->notifyCharacteristic(CHARACTERISTIC_PPG, data);
-    
+    //pollSensor(CHARACTERISTIC_PPG, data);
+    //bluetoothLE->notifyCharacteristic(CHARACTERISTIC_PPG, data);
   }
 }
